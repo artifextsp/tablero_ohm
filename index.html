@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tablero de Ohm TSP</title>
+<style>
+:root{
+  --bg:#0b1020;--panel:#111936;--card:#17224b;--card2:#1d2a5c;
+  --line:#28356a;--txt:#e9edff;--mut:#9aa6d6;
+  --v:#ff5a6a;--i:#3fc1ff;--r:#ffb13b;--p:#ffe14d;
+  --ok:#3ee08f;--vio:#b98cff;
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:var(--font)}
+body{overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--p);outline-offset:2px}
+
+.app{display:grid;grid-template-columns:minmax(0,1fr) 380px;height:100%}
+.stage{position:relative;overflow:auto;background:radial-gradient(ellipse at 50% 0%,#16204a 0%,#0b1020 70%);padding:0 18px 90px}
+.topbar{position:sticky;top:0;z-index:15;display:flex;gap:8px;align-items:center;padding:12px 0;background:linear-gradient(#0d1430 70%,rgba(13,20,48,0))}
+.hintbar{flex:1;min-width:0;background:rgba(17,25,54,.9);border:1px solid var(--line);border-radius:10px;padding:7px 14px;font-size:12.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hintbar b{color:var(--txt)}
+.topbar .vb{background:rgba(23,34,75,.92);border:1px solid var(--line);color:var(--mut);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;letter-spacing:.3px;white-space:nowrap}
+.topbar .vb.on{color:var(--txt);border-color:var(--p);background:var(--card2)}
+.clean .hintbar{visibility:hidden}
+.clean .lbl{visibility:hidden}
+
+/* ---------- Tablero ---------- */
+.board{position:relative;border-radius:24px;padding:28px 28px 40px;
+  background:
+    radial-gradient(circle,rgba(140,170,255,.08) 1.2px,transparent 1.6px) 0 0/18px 18px,
+    linear-gradient(160deg,#1a2656,#111a3d 60%,#0f1736);
+  border:1px solid #2f3e80;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 50px rgba(0,0,0,.45)}
+.screw{position:absolute;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#aab4d8,#59628a);box-shadow:0 1px 2px rgba(0,0,0,.6)}
+.screw::after{content:"";position:absolute;left:3px;right:3px;top:6px;height:2px;background:#3a4166;transform:rotate(40deg)}
+.screw.tl{left:9px;top:9px}.screw.tr{right:9px;top:9px}.screw.bl{left:9px;bottom:9px}.screw.br{right:9px;bottom:9px}
+#wires{position:absolute;left:0;top:0;pointer-events:none;z-index:0}
+.b-head{position:relative;z-index:1;display:flex;justify-content:space-between;align-items:baseline;margin:-6px 0 14px;gap:10px}
+.b-head h2{font-size:13px;letter-spacing:2.5px;color:#c9d2ff;font-weight:800}
+.b-head span{font-size:11px;color:var(--mut);font-family:var(--mono)}
+
+.b-top{position:relative;z-index:1;display:grid;grid-template-columns:280px minmax(0,1fr) 230px;gap:28px;align-items:stretch}
+.mod{background:rgba(9,14,34,.72);border:1px solid #2a3770;border-radius:16px;padding:12px 14px}
+.mod h4{font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--mut);font-weight:800;margin-bottom:8px}
+
+/* Bahía de la batería */
+.bay{position:relative;display:flex;flex-direction:column;gap:10px}
+.holder{position:relative;height:104px;border-radius:12px;background:linear-gradient(#0a0f24,#141c40);border:1px solid #2a3770;overflow:hidden}
+.holder svg{position:absolute;inset:0;width:100%;height:100%;transition:transform .45s cubic-bezier(.6,-0.3,.4,1.3),opacity .3s}
+.holder.out svg{transform:translateY(-120%);opacity:0}
+.jack{position:absolute;top:50%;width:22px;height:22px;margin-top:-11px;border-radius:50%;z-index:2;display:grid;place-items:center;font-weight:900;font-size:14px;box-shadow:inset 0 -2px 3px rgba(0,0,0,.5),0 0 0 3px rgba(0,0,0,.35)}
+.jack.m{left:-11px;background:radial-gradient(circle at 40% 35%,#59607e,#1a1d2c);color:#cfd6ff}
+.jack.p{right:-11px;background:radial-gradient(circle at 40% 35%,#ff8d98,#b51e30);color:#fff}
+.batinfo{display:flex;justify-content:space-between;font-size:12px;color:var(--mut);font-family:var(--mono)}
+.batinfo b{color:var(--txt)}
+.chips{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.chips button{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:7px 2px;font-size:12px;font-weight:800;color:var(--mut);line-height:1.15}
+.chips button small{display:block;font-size:9.5px;font-weight:600;opacity:.8}
+.chips button.on{border-color:var(--p);color:var(--txt);background:var(--card2);box-shadow:0 0 12px rgba(255,225,77,.2)}
+
+/* Controles deslizantes */
+.faders{display:flex;flex-direction:column;gap:10px}
+.fader{display:grid;grid-template-columns:auto 1fr auto;gap:6px 12px;align-items:center;background:rgba(9,14,34,.72);border:1px solid #2a3770;border-radius:14px;padding:10px 14px;border-left:4px solid var(--c)}
+.fader .fl{font-size:11px;letter-spacing:1.2px;font-weight:800;text-transform:uppercase;color:var(--c)}
+.fader .fl small{display:block;letter-spacing:.2px;text-transform:none;font-weight:600;color:var(--mut);font-size:11px}
+.fader .fv{font-family:var(--mono);font-size:22px;font-weight:800;text-align:right;min-width:96px}
+.fader .fv small{font-size:12px;color:var(--mut)}
+.fader input{grid-column:1/-1;width:100%;appearance:none;-webkit-appearance:none;height:30px;background:transparent}
+.fader input::-webkit-slider-runnable-track{height:10px;border-radius:5px;background:linear-gradient(90deg,var(--c) var(--pct,50%),#0a0f26 var(--pct,50%));box-shadow:inset 0 1px 3px rgba(0,0,0,.6)}
+.fader input::-moz-range-track{height:10px;border-radius:5px;background:#0a0f26}
+.fader input::-moz-range-progress{height:10px;border-radius:5px;background:var(--c)}
+.fader input::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:30px;margin-top:-10px;border-radius:7px;background:linear-gradient(#f2f4ff,#9aa4cc);border:1px solid #20284c;box-shadow:0 2px 6px rgba(0,0,0,.6),inset 0 -6px 0 rgba(0,0,0,.12)}
+.fader input::-moz-range-thumb{width:26px;height:30px;border-radius:7px;background:linear-gradient(#f2f4ff,#9aa4cc);border:1px solid #20284c}
+.fader .led{width:10px;height:10px;border-radius:50%;background:#3a2a10;display:inline-block;margin-left:6px;vertical-align:middle}
+.fader .led.on{background:var(--r);box-shadow:0 0 8px var(--r)}
+
+/* Multímetro */
+.meter{display:flex;flex-direction:column;gap:8px}
+.lcd{background:#0b1a12;border:2px solid #24402e;border-radius:12px;padding:10px 12px;font-family:var(--mono);color:#8dffb5;box-shadow:inset 0 0 18px rgba(0,0,0,.7);display:grid;grid-template-columns:auto 1fr;gap:3px 10px;align-items:baseline}
+.lcd span{font-size:11px;color:#4f9a6c;font-weight:700}
+.lcd b{font-size:21px;text-align:right;font-weight:800;text-shadow:0 0 8px rgba(141,255,181,.4)}
+.lcd b.v{color:#ff9aa4}.lcd b.i{color:#8fdcff}.lcd b.r{color:#ffc978}.lcd b.p{color:#fff07a}
+.mode{display:flex;gap:6px}
+.mode i{flex:1;text-align:center;font-style:normal;font-family:var(--mono);font-size:11px;font-weight:800;border-radius:7px;padding:4px;background:#0a0f24;color:#3d4772;border:1px solid #232d5c}
+.mode i.on{color:#0b1020;background:var(--ok);border-color:var(--ok)}
+.mode i.cc.on{background:var(--r);border-color:var(--r)}
+.dur{font-size:11.5px;color:var(--mut);line-height:1.4}
+.dur b{color:var(--txt)}
+
+/* Circuito */
+.b-sub{position:relative;z-index:1;margin:40px 0 0 44px;font-size:11px;letter-spacing:1.5px;font-weight:800;color:#7e8bc6;text-transform:uppercase}
+.b-circ{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:40px 34px;align-items:center;padding:24px 0 14px 44px;min-height:200px}
+.grp{position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;padding:30px 26px 14px;border:1.5px dashed rgba(120,140,220,.35);border-radius:18px;background:rgba(8,12,32,.38)}
+.grp.fixed{border-style:solid;border-color:rgba(120,140,220,.22);padding-bottom:14px}
+.grp .gt{position:absolute;top:8px;left:12px;right:12px;font-size:10px;letter-spacing:1.1px;font-weight:800;color:#7e8bc6;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grp .gt em{font-style:normal;color:var(--vio)}
+.act{position:relative;width:156px;background:linear-gradient(#1b2757,#151f48);border:1px solid #2f3d80;border-radius:13px;padding:7px 8px 8px;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.act:hover{border-color:#4a5cb0}
+.act.sel{border-color:var(--p);box-shadow:0 0 0 2px rgba(255,225,77,.25)}
+.act.dead{background:linear-gradient(#2a1a22,#1d141c);border-color:#5a2a36}
+.act .nm{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:800;margin-bottom:3px;padding-right:18px}
+.act .nm small{font-weight:600;color:var(--mut);font-size:10.5px;margin-left:auto}
+.act canvas{display:block;width:100%;height:50px;border-radius:8px;background:#0a0f26}
+.act .tag{position:absolute;right:6px;top:30px;font-size:10px;font-weight:800;padding:2px 6px;border-radius:6px;background:rgba(0,0,0,.55)}
+.ro{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:6px}
+.ro div{white-space:nowrap;background:rgba(0,0,0,.28);border-radius:6px;padding:3px 5px;font-family:var(--mono);font-size:11px;font-weight:700;display:flex;justify-content:space-between;gap:4px;border-top:2px solid var(--c)}
+.ro div span{color:var(--mut);font-weight:600;font-size:10px;font-family:var(--font)}
+.hideRo .ro{display:none}
+.x{position:absolute;right:5px;top:5px;width:20px;height:20px;border-radius:6px;border:none;background:rgba(255,90,106,.14);color:#ff9aa5;font-size:13px;line-height:1;font-weight:800}
+.x:hover{background:rgba(255,90,106,.35)}
+.fix{display:none;margin-top:6px;width:100%;border:1px solid var(--r);background:rgba(255,177,59,.14);color:#ffd28f;border-radius:8px;padding:5px;font-size:11.5px;font-weight:800}
+.act.dead .fix{display:block}
+.addp{border:1.5px dashed rgba(185,140,255,.55);background:rgba(185,140,255,.07);color:#d6c3ff;border-radius:10px;padding:6px 10px;font-size:12px;font-weight:800;width:156px}
+.addp:hover,.adds:hover{background:rgba(185,140,255,.18)}
+.adds{align-self:center;width:118px;min-height:132px;border:2px dashed rgba(185,140,255,.6);background:rgba(185,140,255,.06);border-radius:18px;color:#d6c3ff;font-weight:800;font-size:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.adds b{font-size:34px;line-height:1}
+.grp.fixed .act{width:132px}
+.adds:disabled,.addp:disabled{opacity:.35;cursor:not-allowed}
+.legend{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:6px 18px;margin:42px 0 0 44px;font-size:11.5px;color:var(--mut)}
+.legend i{display:inline-block;width:20px;height:4px;border-radius:2px;vertical-align:middle;margin-right:6px}
+.legend .dot{width:9px;height:9px;border-radius:50%;background:#9be4ff;box-shadow:0 0 6px #3fc1ff}
+
+/* Menú para añadir */
+.menu{position:fixed;z-index:40;display:none;background:#121a3e;border:1px solid #3a4a99;border-radius:14px;padding:8px;box-shadow:0 18px 40px rgba(0,0,0,.55);width:250px}
+.menu.show{display:block}
+.menu h5{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--vio);padding:4px 6px 8px}
+.menu button{display:grid;grid-template-columns:30px 1fr;gap:2px 8px;align-items:center;width:100%;text-align:left;background:none;border:1px solid transparent;border-radius:10px;padding:7px 8px}
+.menu button:hover{background:var(--card2);border-color:var(--line)}
+.menu button span{grid-row:span 2;font-size:22px;text-align:center}
+.menu button b{font-size:13px}
+.menu button small{font-size:11px;color:var(--mut)}
+
+.toast{position:fixed;left:calc((100% - 380px)/2);top:64px;transform:translate(-50%,-10px);background:rgba(120,22,34,.96);border:1px solid var(--v);border-radius:12px;padding:10px 18px;font-size:13px;line-height:1.45;color:#fff;z-index:50;opacity:0;pointer-events:none;transition:.25s;max-width:min(520px,90vw);text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.info{background:rgba(18,54,92,.96);border-color:var(--i)}
+.caption{position:fixed;left:calc((100% - 380px)/2);bottom:18px;transform:translateX(-50%);width:min(620px,calc(100% - 420px));background:linear-gradient(135deg,rgba(60,40,110,.97),rgba(25,35,85,.97));border:1px solid var(--vio);border-radius:14px;padding:12px 16px;font-size:14px;line-height:1.5;z-index:45;display:none;box-shadow:0 12px 30px rgba(0,0,0,.5)}
+.caption b{color:var(--vio)}
+.caption .nav{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+.caption button{background:var(--vio);border:none;border-radius:8px;padding:6px 14px;color:#fff;font-weight:700;font-size:13px}
+.caption button.sec{background:rgba(255,255,255,.1)}
+.pulse{animation:pulse 1.2s ease-in-out infinite;position:relative;z-index:3}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(185,140,255,.9),0 0 22px rgba(185,140,255,.5)}50%{box-shadow:0 0 0 7px rgba(185,140,255,.35),0 0 34px rgba(185,140,255,.7)}}
+
+/* ---------- Panel ---------- */
+.panel{background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;padding:18px 16px 40px;display:flex;flex-direction:column;gap:14px}
+.panel::-webkit-scrollbar{width:7px}.panel::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+.kicker{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--i);font-weight:800}
+.panel h1{font-size:21px;line-height:1.2;margin-top:4px}
+.sub{font-size:13px;line-height:1.5;color:var(--mut);margin-top:6px}
+.m-l{color:var(--p);font-weight:700}.m-m{color:var(--ok);font-weight:700}.m-s{color:var(--vio);font-weight:700}.m-t{color:var(--v);font-weight:700}
+.panel h3{font-size:11.5px;letter-spacing:1.1px;text-transform:uppercase;color:var(--mut);font-weight:800;margin-bottom:8px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+.sw{display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none}
+.sw .knob{width:46px;height:26px;border-radius:13px;background:#2a3566;position:relative;flex:none;transition:.2s;border:1px solid var(--line)}
+.sw .knob::after{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#8a94c4;transition:.2s}
+.sw.on .knob{background:var(--ok);border-color:var(--ok)}
+.sw.on .knob::after{left:23px;background:#fff}
+.sw b{display:block;font-size:14px}.sw small{display:block;font-size:12px;color:var(--mut)}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.card{background:var(--card);border-radius:11px;padding:9px 11px;border-top:3px solid}
+.card.cv{border-color:var(--v)}.card.ci{border-color:var(--i)}.card.cr{border-color:var(--r)}.card.cp{border-color:var(--p)}
+.card small{display:block;font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--mut)}
+.card b{display:block;font-size:20px;margin-top:2px;font-variant-numeric:tabular-nums}
+.card em{font-style:normal;font-size:11px;color:var(--mut)}
+.ohm{display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:center}
+.ohm svg{width:120px;height:104px}
+.eq{font-family:var(--mono);font-size:12.5px;line-height:1.7;color:var(--mut)}
+.eq b{color:var(--txt)}
+.eq .cv{color:#ff9aa4}.eq .ci{color:#8fdcff}.eq .cr{color:#ffc978}
+.insp{font-size:12.5px;line-height:1.55;color:var(--mut)}
+.insp b{color:var(--txt)}
+.diag{list-style:none;display:flex;flex-direction:column;gap:6px}
+.diag li{display:grid;grid-template-columns:20px 1fr;gap:8px;background:var(--card);border-radius:10px;padding:8px 10px;font-size:12.5px;line-height:1.5;color:var(--mut)}
+.diag li b{color:var(--txt)}
+.diag li::before{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:800}
+.diag li.ok::before{content:"✓";background:rgba(62,224,143,.16);color:var(--ok)}
+.diag li.warn::before{content:"!";background:rgba(255,177,59,.16);color:var(--r)}
+.diag li.bad::before{content:"✕";background:rgba(255,90,106,.16);color:var(--v)}
+.diag li.info::before{content:"i";background:rgba(63,193,255,.16);color:var(--i)}
+.presets{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.presets button{text-align:left;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:9px 10px;font-size:11.5px;color:var(--mut);line-height:1.35}
+.presets button b{display:block;font-size:13px;color:var(--txt);margin-bottom:2px}
+.presets button:hover{border-color:var(--i);background:var(--card2)}
+.tour{background:linear-gradient(135deg,rgba(185,140,255,.14),rgba(63,193,255,.06));border:1px solid var(--vio);border-radius:12px;padding:12px}
+.tour p{font-size:13px;line-height:1.5;color:var(--mut);margin-bottom:10px}
+.tour .btns{display:flex;gap:7px}
+.tour button{background:var(--vio);border:none;border-radius:9px;padding:7px 14px;color:#fff;font-weight:700;font-size:13px}
+.tour button.sec{background:var(--card);border:1px solid var(--line);color:var(--mut)}
+.dots{display:flex;gap:4px;margin-top:10px;flex-wrap:wrap}
+.dots i{width:16px;height:4px;border-radius:2px;background:var(--line)}
+.dots i.on{background:var(--vio)}
+.opts{display:flex;flex-direction:column;gap:7px}
+.chk{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--mut);cursor:pointer;user-select:none}
+.chk input{accent-color:var(--i);width:16px;height:16px}
+.seg{display:flex;background:#0d1430;border:1px solid var(--line);border-radius:9px;padding:3px;gap:3px}
+.seg button{flex:1;background:none;border:none;border-radius:7px;padding:6px;font-size:12px;color:var(--mut)}
+.seg button.on{background:var(--card2);color:var(--txt)}
+.fact{background:var(--card);border-radius:12px;padding:12px;border-left:3px solid var(--p)}
+.fact p{font-size:12.5px;line-height:1.6;color:var(--mut)}
+.fact button{margin-top:8px;background:none;border:none;color:var(--p);font-size:12.5px;font-weight:700;padding:0}
+.keys{font-size:11.5px;color:#6d78a8;line-height:1.6}
+
+@media (max-width:1250px){.b-top{grid-template-columns:260px minmax(0,1fr)}.meter{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;align-items:start}}
+@media (max-width:900px){
+  body{overflow:auto}
+  .app{grid-template-columns:1fr;height:auto}
+  .stage{overflow:visible;padding-bottom:30px}
+  .panel{border-left:none;border-top:1px solid var(--line)}
+  .toast{left:50%}.caption{left:50%;width:calc(100% - 24px)}
+}
+@media (max-width:700px){
+  .stage{padding:0 8px 24px}
+  .board{padding:24px 26px 36px;border-radius:18px}
+  .b-top{grid-template-columns:1fr;gap:18px}
+  .meter{display:flex}
+  .b-circ{padding-left:40px;gap:34px 26px}
+  .b-sub,.legend{margin-left:40px}
+  .act,.addp{width:140px}
+  .grp.fixed .act{width:140px}
+  .ro div{font-size:10px;padding:3px 4px}
+  .grp{padding:30px 22px 12px}
+  .hintbar{display:none}
+}
+@media (prefers-reduced-motion:reduce){.pulse{animation:none;box-shadow:0 0 0 3px var(--vio)}}
+</style>
+</head>
+<body>
+<div class="app">
+  <main class="stage" id="stage">
+    <div class="topbar">
+      <div class="hintbar" id="hint">Cambia la <b>batería</b>, mueve los <b>controles</b> y añade actuadores con <b>+ serie</b> o <b>+ paralelo</b>. Toca un actuador para ver sus medidas.</div>
+      <button class="vb on" id="lblBtn" aria-pressed="true" title="Mostrar u ocultar etiquetas (E)">🏷 ETIQUETAS</button>
+      <button class="vb" id="fsBtn" title="Pantalla completa (F)" aria-label="Pantalla completa">⛶</button>
+    </div>
+
+    <div class="board" id="board">
+      <canvas id="wires"></canvas>
+      <i class="screw tl"></i><i class="screw tr"></i><i class="screw bl"></i><i class="screw br"></i>
+      <div class="b-head"><h2>TABLERO DE ENERGÍA · LEY DE OHM</h2><span class="lbl">V = I × R</span></div>
+
+      <div class="b-top">
+        <!-- Batería -->
+        <div class="mod bay" id="bay">
+          <h4>🔋 Batería</h4>
+          <div class="holder" id="holder">
+            <span class="jack m" id="jackM" title="Polo negativo (−)">−</span>
+            <span class="jack p" id="jackP" title="Polo positivo (+)">+</span>
+            <svg id="batSvg" viewBox="0 0 240 104" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
+          </div>
+          <div class="batinfo"><span id="batName">—</span><span>en bornes: <b id="batVt">—</b></span></div>
+          <div class="chips" id="chips" role="group" aria-label="Cambiar batería"></div>
+        </div>
+
+        <!-- Controles deslizantes -->
+        <div class="faders">
+          <div class="fader" id="fV" style="--c:var(--v)">
+            <div class="fl">Voltaje<small class="lbl">Regulador: cuánto voltaje entrega</small></div><div></div>
+            <div class="fv" id="fvV">3,7<small> V</small></div>
+            <input type="range" id="sV" min="0" max="3.7" step="0.1" value="3.7" aria-label="Voltaje del regulador">
+          </div>
+          <div class="fader" id="fI" style="--c:var(--i)">
+            <div class="fl">Amperaje <i class="led" id="ccLed" title="Encendido: la fuente está limitando la corriente"></i><small class="lbl">Límite máximo de corriente</small></div><div></div>
+            <div class="fv" id="fvI">2,00<small> A</small></div>
+            <input type="range" id="sI" min="0.05" max="3" step="0.05" value="2" aria-label="Límite de corriente">
+          </div>
+          <div class="fader" id="fR" style="--c:var(--r)">
+            <div class="fl">Resistencia<small class="lbl">Reóstato en serie con el circuito</small></div><div></div>
+            <div class="fv" id="fvR">0<small> Ω</small></div>
+            <input type="range" id="sR" min="0" max="200" step="1" value="0" aria-label="Resistencia del reóstato">
+          </div>
+        </div>
+
+        <!-- Multímetro -->
+        <div class="mod meter" id="meter">
+          <div>
+            <h4>📟 Consumo total</h4>
+            <div class="lcd" role="status" aria-live="off">
+              <span>V</span><b class="v" id="mV">—</b>
+              <span>A</span><b class="i" id="mI">—</b>
+              <span>Ω</span><b class="r" id="mR">—</b>
+              <span>W</span><b class="p" id="mP">—</b>
+            </div>
+          </div>
+          <div>
+            <div class="mode"><i id="mCV" title="Voltaje constante: entrega el voltaje elegido">CV</i><i class="cc" id="mCC" title="Corriente limitada: llegó al límite de amperaje">CC</i></div>
+            <p class="dur" id="dur" style="margin-top:8px">—</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="b-sub lbl" id="bsub">Circuito · la corriente sale por + y regresa por − →</div>
+      <div class="b-circ" id="circ"></div>
+      <div class="legend lbl">
+        <span><i style="background:#ff5a6a"></i>Cable positivo (+)</span>
+        <span><i style="background:#6d78a8"></i>Cable negativo (−)</span>
+        <span><i style="background:#e0a04a"></i>Conexiones</span>
+        <span><i class="dot"></i><span id="legE">Electrones (van de − a +)</span></span>
+      </div>
+    </div>
+  </main>
+
+  <aside class="panel">
+    <header>
+      <div class="kicker">TSP Academy · Simulador de energía</div>
+      <h1>Tablero de Ohm</h1>
+      <p class="sub">La <b>energía</b> se manifiesta como <span class="m-l">luz</span>, <span class="m-m">movimiento</span>, <span class="m-s">sonido</span> y <span class="m-t">temperatura</span>. Cambia la batería y los controles, y mira cuánto voltaje y corriente consume cada actuador.</p>
+    </header>
+
+    <section class="box">
+      <div class="sw on" id="swMain" role="switch" aria-checked="true" tabindex="0"><span class="knob"></span><div><b>Interruptor general</b><small id="swTxt">Cerrado: la corriente puede circular</small></div></div>
+    </section>
+
+    <div class="cards">
+      <div class="card cv"><small>Voltaje</small><b id="cV">—</b><em>sale del regulador</em></div>
+      <div class="card ci"><small>Corriente</small><b id="cI">—</b><em>total del circuito</em></div>
+      <div class="card cr"><small>Resistencia</small><b id="cR">—</b><em>total = V ÷ I</em></div>
+      <div class="card cp"><small>Potencia</small><b id="cP">—</b><em>P = V × I</em></div>
+    </div>
+
+    <section class="box" id="ohm">
+      <h3>Ley de Ohm en vivo</h3>
+      <div class="ohm">
+        <svg viewBox="0 0 120 104" aria-hidden="true">
+          <path d="M60 6 L114 98 L6 98 Z" fill="#0d1430" stroke="#3a4a99" stroke-width="2"/>
+          <line x1="28" y1="60" x2="92" y2="60" stroke="#3a4a99" stroke-width="2"/>
+          <line x1="60" y1="60" x2="60" y2="98" stroke="#3a4a99" stroke-width="2"/>
+          <text x="60" y="46" text-anchor="middle" font-size="22" font-weight="800" fill="#ff9aa4">V</text>
+          <text x="40" y="88" text-anchor="middle" font-size="20" font-weight="800" fill="#8fdcff">I</text>
+          <text x="80" y="88" text-anchor="middle" font-size="20" font-weight="800" fill="#ffc978">R</text>
+        </svg>
+        <div class="eq" id="eq">—</div>
+      </div>
+    </section>
+
+    <section class="box">
+      <h3>Actuador seleccionado</h3>
+      <div class="insp" id="insp">Toca cualquier actuador del tablero para ver su voltaje, corriente, resistencia y potencia, y en qué forma de energía la transforma.</div>
+    </section>
+
+    <section>
+      <h3>Diagnóstico</h3>
+      <ul class="diag" id="diag"></ul>
+    </section>
+
+    <section>
+      <h3>Experimentos</h3>
+      <div class="presets" id="presets"></div>
+    </section>
+
+    <section class="tour">
+      <h3 style="color:var(--vio)">🎓 Recorrido guiado</h3>
+      <p id="tourTxt">Conoce cada parte del tablero y aprende a leer voltaje, corriente y resistencia.</p>
+      <div class="btns"><button id="tourGo">Iniciar recorrido</button><button class="sec" id="tourEnd">Salir</button></div>
+      <div class="dots" id="tourDots"></div>
+    </section>
+
+    <section class="box">
+      <h3>Opciones</h3>
+      <div class="opts">
+        <label class="chk"><input type="checkbox" id="chkL" checked> Etiquetas (tecla E)</label>
+        <label class="chk"><input type="checkbox" id="chkRo" checked> Mediciones en cada actuador</label>
+        <label class="chk"><input type="checkbox" id="chkP" checked> Partículas en los cables</label>
+        <div class="seg" id="seg"><button data-m="e" class="on">Electrones (− → +)</button><button data-m="c">Convencional (+ → −)</button></div>
+        <label class="chk"><input type="checkbox" id="chkS"> Sonidos</label>
+      </div>
+    </section>
+
+    <section class="fact">
+      <h3 style="color:var(--p)">💡 ¿Sabías que…?</h3>
+      <p id="fact"></p>
+      <button id="factNext">Otro dato →</button>
+    </section>
+    <p class="keys">Atajos: <b>1–4</b> baterías · <b>E</b> etiquetas · <b>Espacio</b> interruptor · <b>F</b> pantalla completa</p>
+  </aside>
+</div>
+
+<div class="menu" id="menu" role="menu"></div>
+<div class="caption" id="caption"><div id="capTxt"></div><div class="nav"><button class="sec" id="capPrev">◀ Anterior</button><button class="sec" id="capEnd">Salir</button><button id="capNext">Siguiente ▶</button></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const TAU = Math.PI * 2;
+// Números con coma decimal (Colombia)
+const nf = (v, d) => v.toFixed(d).replace('.', ',');
+const fV = v => nf(v, v >= 10 ? 1 : 2) + ' V';
+const fA = i => i < 1e-4 ? '0 mA' : i < 1 ? nf(i * 1000, i < 0.01 ? 2 : 0) + ' mA' : nf(i, 2) + ' A';
+const fR = r => !isFinite(r) || r > 1e6 ? '∞ Ω' : r >= 1000 ? nf(r / 1000, 2) + ' kΩ' : nf(r, r < 10 ? 2 : r < 100 ? 1 : 0) + ' Ω';
+const fW = p => p < 1e-4 ? '0 W' : p < 1 ? nf(p * 1000, 0) + ' mW' : nf(p, 2) + ' W';
+
+/* =========================================================
+   Baterías comerciales (valores típicos reales)
+   ========================================================= */
+const BATS = {
+  aa:  { key: '1', v: 1.5, r: 0.15, mah: 2500, name: 'Pila AA alcalina', short: 'AA', imax: 2 },
+  li:  { key: '2', v: 3.7, r: 0.05, mah: 2600, name: 'Batería 18650 de litio', short: '18650', imax: 3 },
+  n9:  { key: '3', v: 9, r: 1.7, mah: 550, name: 'Batería 9 V alcalina', short: '9 V', imax: 0.8 },
+  b12: { key: '4', v: 12, r: 0.03, mah: 7000, name: 'Batería 12 V de gel (plomo-ácido)', short: '12 V', imax: 5 }
+};
+/* Actuadores: modelos eléctricos de componentes reales de laboratorio */
+const TYPES = {
+  bulb:   { name: 'Bombillo', icon: '💡', R: 12, man: 'Luz + calor', col: '#ffe14d', spec: '12 Ω · ideal 3,7 V' },
+  led:    { name: 'LED rojo', icon: '🔴', man: 'Luz', col: '#ff5a6a', spec: 'necesita 1,9 V · máx 35 mA' },
+  motor:  { name: 'Motor DC', icon: '⚙️', R: 6, man: 'Movimiento', col: '#3ee08f', spec: '6 Ω · ideal 3 a 6 V' },
+  buzzer: { name: 'Zumbador', icon: '🔊', R: 80, man: 'Sonido', col: '#b98cff', spec: '80 Ω · suena desde 1 V' },
+  heater: { name: 'Calefactor', icon: '🔥', R: 10, man: 'Temperatura', col: '#ff8a3d', spec: '10 Ω · se calienta' }
+};
+const LED_VF = 1.9, LED_RS = 100, LED_MAX = 0.035;
+
+/* =========================================================
+   Estado
+   ========================================================= */
+const st = { bat: 'li', vset: 3.7, ilim: 2, reo: 0, on: true, sel: null, labels: true, ro: true, parts: true, emode: 'e', sound: false };
+let uid = 1;
+const mk = type => ({ id: uid++, type, burned: false, over: 0, T: 25, spd: 0, ang: 0, V: 0, I: 0, P: 0, smoke: [] });
+let chain = [];
+function resetChain(groups) {
+  chain = [{ kind: 'sw', items: [mk('sw')] }, { kind: 'reo', items: [mk('reo')] }];
+  for (const g of groups) chain.push({ kind: 'g', items: g.map(mk) });
+}
+const MAXG = 4, MAXP = 4;
+const E = { Vout: 0, I: 0, Vt: 0, mode: 'CV', R: Infinity, P: 0, open: null };
+
+/* =========================================================
+   Modelo eléctrico (Ohm + Kirchhoff, componentes no lineales)
+   ========================================================= */
+function cur(e, V) {
+  if (e.burned) return 0;
+  switch (e.type) {
+    case 'sw': return st.on ? V / 1e-4 : 0;
+    case 'reo': return V / Math.max(st.reo, 1e-4);
+    case 'led': return V > LED_VF ? (V - LED_VF) / LED_RS + V * 1e-7 : V * 1e-7; // diodo: no conduce bajo 1,9 V
+    default: return V / TYPES[e.type].R;
+  }
+}
+const VMAX = 60;
+const gsum = (g, V) => { let s = 0; for (const e of g.items) s += cur(e, V); return s; };
+function gV(g, I) { // voltaje del grupo en paralelo para que pase la corriente I
+  if (I <= 0) return 0;
+  if (gsum(g, VMAX) < I) return Infinity;
+  let lo = 0, hi = VMAX;
+  for (let k = 0; k < 44; k++) { const m = (lo + hi) / 2; if (gsum(g, m) < I) lo = m; else hi = m; }
+  return (lo + hi) / 2;
+}
+function need(I) { let s = 0; for (const g of chain) { const v = gV(g, I); if (!isFinite(v)) return Infinity; s += v; } return s; }
+function solve() {
+  const B = BATS[st.bat];
+  const avail = I => Math.max(0, Math.min(st.vset, B.v - I * B.r));
+  const opens = chain.filter(g => gsum(g, VMAX) <= 1e-12);
+  let I = 0; E.mode = 'CV';
+  if (!opens.length && st.vset > 0) {
+    let lo = 0, hi = B.v / B.r;
+    for (let k = 0; k < 56; k++) { const m = (lo + hi) / 2; if (need(m) - avail(m) < 0) lo = m; else hi = m; }
+    I = (lo + hi) / 2;
+    if (I > st.ilim) { I = st.ilim; E.mode = 'CC'; }
+    if (I < 1e-9) I = 0;
+  }
+  E.I = I;
+  E.Vout = I > 0 ? Math.min(need(I), avail(I)) : avail(0);
+  E.Vt = B.v - I * B.r;
+  E.R = I > 1e-9 ? E.Vout / I : Infinity;
+  E.P = E.Vout * I;
+  E.open = opens[0] || null;
+  for (const g of chain) {
+    g.V = I > 0 ? gV(g, I) : (g === E.open ? E.Vout : 0);
+    for (const e of g.items) { e.V = g.V; e.I = I > 0 ? cur(e, g.V) : 0; e.P = e.V * e.I; }
+  }
+}
+
+/* =========================================================
+   Comportamiento de cada actuador (brillo, giro, sonido, calor, quemado)
+   ========================================================= */
+const BURN = { led: [e => e.I > 0.04, 0.5, 'El LED recibió ' + '', 'led'], bulb: [e => e.P > 3.5, 1.2], motor: [e => e.V > 10, 5] };
+function update(dt) {
+  for (const g of chain) for (const e of g.items) {
+    const b = BURN[e.type];
+    if (b && !e.burned) {
+      if (b[0](e)) e.over += dt; else e.over = Math.max(0, e.over - dt);
+      if (e.over > b[1]) burn(e);
+    }
+    if (e.type === 'motor') { const t = (!e.burned && e.V > 0.6) ? e.V / 6 : 0; e.spd += (t - e.spd) * Math.min(1, dt * 2.5); e.ang += e.spd * dt * 18; }
+    if (e.type === 'heater') { e.T += ((e.P - (e.T - 25) / 12) / 0.5) * dt; }
+    if (e.burned && Math.random() < dt * 6) e.smoke.push({ x: 60 + Math.random() * 16, y: 30, t: 0 });
+    for (let k = e.smoke.length - 1; k >= 0; k--) { const s = e.smoke[k]; s.t += dt; s.y -= dt * 18; s.x += Math.sin(s.t * 3 + k) * dt * 6; if (s.t > 1.6) e.smoke.splice(k, 1); }
+  }
+}
+function burn(e) {
+  e.burned = true; sPop();
+  const msg = {
+    led: `💥 ¡El LED se quemó! Le pasaron ${fA(e.I)} y solo aguanta 35 mA. Sube la resistencia o usa menos voltaje para protegerlo.`,
+    bulb: `💥 ¡El bombillo se fundió! Disipaba ${fW(e.P)} y está hecho para unos 1,1 W. Demasiado voltaje = demasiada corriente = el filamento se derrite.`,
+    motor: `💥 ¡El motor se quemó! Con ${fV(e.V)} sus bobinas se recalentaron. Este motor trabaja bien entre 3 y 6 V.`
+  }[e.type];
+  toast(msg);
+  rebuild();
+}
+
+/* =========================================================
+   Construcción del tablero (DOM)
+   ========================================================= */
+const circ = $('circ'), board = $('board');
+function actHTML(g, e, gi) {
+  const T = e.type === 'sw' ? { name: 'Interruptor', icon: '🔘', man: '' } : e.type === 'reo' ? { name: 'Reóstato', icon: '〰️', man: '' } : TYPES[e.type];
+  const rm = g.kind === 'g' ? `<button class="x" data-rm="${e.id}" title="Quitar este actuador" aria-label="Quitar ${T.name}">×</button>` : '';
+  return `<div class="act${e.burned ? ' dead' : ''}${st.sel === e.id ? ' sel' : ''}" data-id="${e.id}" tabindex="0">
+    ${rm}
+    <div class="nm">${T.icon} ${T.name}</div>
+    <canvas width="312" height="100"></canvas>
+    <span class="tag" data-tag></span>
+    <div class="ro">
+      <div style="--c:var(--v)"><span>V</span><b data-v>—</b></div>
+      <div style="--c:var(--i)"><span>I</span><b data-i>—</b></div>
+      <div style="--c:var(--r)"><span>R</span><b data-r>—</b></div>
+      <div style="--c:var(--p)"><span>P</span><b data-p>—</b></div>
+    </div>
+    ${e.type in BURN ? '<button class="fix" data-fix="' + e.id + '">🔧 Cambiar por uno nuevo</button>' : ''}
+  </div>`;
+}
+function rebuild() {
+  let n = 0;
+  circ.innerHTML = chain.map((g, gi) => {
+    let title;
+    if (g.kind === 'sw') title = 'Interruptor';
+    else if (g.kind === 'reo') title = 'Reóstato (R)';
+    else { n++; title = `Serie ${n}` + (g.items.length > 1 ? ` · <em>${g.items.length} en paralelo</em>` : ''); }
+    return `<div class="grp${g.kind !== 'g' ? ' fixed' : ''}" data-g="${gi}"><div class="gt lbl">${title}</div>
+      ${g.items.map(e => actHTML(g, e, gi)).join('')}
+      ${g.kind === 'g' ? `<button class="addp" data-addp="${gi}" ${g.items.length >= MAXP ? 'disabled' : ''} title="Añadir un actuador en paralelo">+ paralelo</button>` : ''}
+    </div>`;
+  }).join('') + `<button class="adds" id="addS" ${chain.filter(g => g.kind === 'g').length >= MAXG ? 'disabled' : ''} title="Añadir un actuador en serie"><b>+</b>serie</button>`;
+  for (const g of chain) { g.el = circ.querySelector(`[data-g="${chain.indexOf(g)}"]`); for (const e of g.items) { const el = circ.querySelector(`[data-id="${e.id}"]`); e.el = el; e.cv = el.querySelector('canvas'); e.cx = e.cv.getContext('2d'); e.q = { v: el.querySelector('[data-v]'), i: el.querySelector('[data-i]'), r: el.querySelector('[data-r]'), p: el.querySelector('[data-p]'), tag: el.querySelector('[data-tag]') }; } }
+  requestAnimationFrame(geo);
+}
+circ.addEventListener('click', e => {
+  const t = e.target;
+  const rm = t.closest('[data-rm]'), fx = t.closest('[data-fix]'), ap = t.closest('[data-addp]'), as = t.closest('#addS'), act = t.closest('.act');
+  if (rm) { removeItem(+rm.dataset.rm); return; }
+  if (fx) { const it = findItem(+fx.dataset.fix); it.burned = false; it.over = 0; it.smoke = []; sPlace(); rebuild(); return; }
+  if (ap) { openMenu(ap, +ap.dataset.addp); return; }
+  if (as) { openMenu(as, -1); return; }
+  if (act) {
+    const it = findItem(+act.dataset.id);
+    if (it.type === 'sw') { setOn(!st.on); }
+    else if (it.type === 'reo') { $('sR').focus(); }
+    select(it.id);
+  }
+});
+circ.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('act')) { e.preventDefault(); e.target.click(); } });
+function findItem(id) { for (const g of chain) for (const e of g.items) if (e.id === id) return e; return null; }
+function removeItem(id) {
+  for (let gi = 0; gi < chain.length; gi++) {
+    const g = chain[gi], k = g.items.findIndex(e => e.id === id);
+    if (k >= 0) { g.items.splice(k, 1); if (!g.items.length) chain.splice(gi, 1); break; }
+  }
+  if (st.sel === id) st.sel = null;
+  sClick(); rebuild(); syncUI(true);
+}
+function select(id) {
+  st.sel = id;
+  circ.querySelectorAll('.act').forEach(a => a.classList.toggle('sel', +a.dataset.id === id));
+  sClick(); syncUI(true);
+}
+
+/* Menú de actuadores */
+const menu = $('menu');
+let menuTarget = null;
+menu.innerHTML = '<h5>Elige un actuador</h5>' + Object.entries(TYPES).map(([k, t]) => `<button data-type="${k}" role="menuitem"><span>${t.icon}</span><b>${t.name}</b><small>${t.man} · ${t.spec}</small></button>`).join('');
+function openMenu(btn, gi) {
+  menuTarget = gi;
+  menu.querySelector('h5').textContent = gi < 0 ? 'Añadir en SERIE (nuevo grupo)' : 'Añadir en PARALELO';
+  menu.classList.add('show');
+  const r = btn.getBoundingClientRect(), mw = 250, mh = menu.offsetHeight;
+  let x = Math.min(window.innerWidth - mw - 8, Math.max(8, r.left + r.width / 2 - mw / 2));
+  let y = r.bottom + 8; if (y + mh > window.innerHeight - 8) y = Math.max(8, r.top - mh - 8);
+  menu.style.left = x + 'px'; menu.style.top = y + 'px';
+  menu.querySelector('button').focus();
+}
+menu.addEventListener('click', e => {
+  const b = e.target.closest('[data-type]'); if (!b) return;
+  const it = mk(b.dataset.type);
+  if (menuTarget < 0) chain.push({ kind: 'g', items: [it] }); else chain[menuTarget].items.push(it);
+  menu.classList.remove('show'); sPlace(); rebuild(); select(it.id);
+  toast(menuTarget < 0 ? `Añadiste ${TYPES[it.type].name} en SERIE: ahora la corriente tiene que pasar por él también (un solo camino).` : `Añadiste ${TYPES[it.type].name} en PARALELO: tiene su propio camino y recibe el mismo voltaje que sus vecinos.`, 'info');
+});
+document.addEventListener('pointerdown', e => { if (menu.classList.contains('show') && !menu.contains(e.target) && !e.target.closest('[data-addp],#addS')) menu.classList.remove('show'); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') menu.classList.remove('show'); });
+
+/* =========================================================
+   Batería: dibujo frontal y cambio
+   ========================================================= */
+const BSVG = {
+  aa: `<line x1="0" y1="52" x2="44" y2="52" stroke="#3a4064" stroke-width="5"/><line x1="206" y1="52" x2="240" y2="52" stroke="#d63a4a" stroke-width="5"/>
+    <rect x="44" y="30" width="156" height="44" rx="8" fill="#16181f"/><rect x="140" y="30" width="60" height="44" rx="8" fill="#c98a2b"/><rect x="140" y="30" width="12" height="44" fill="#16181f"/>
+    <rect x="200" y="42" width="8" height="20" rx="3" fill="#cfd3dc"/><rect x="44" y="34" width="156" height="6" rx="3" fill="rgba(255,255,255,.12)"/>
+    <text x="96" y="58" text-anchor="middle" font-size="15" font-weight="800" fill="#f2f2f2" font-family="system-ui">1,5 V</text><text x="176" y="57" text-anchor="middle" font-size="12" font-weight="800" fill="#2a1a00" font-family="system-ui">AA</text>
+    <text x="58" y="58" font-size="16" font-weight="900" fill="#9aa">−</text><text x="186" y="27" font-size="14" font-weight="900" fill="#ff8d98">+</text>`,
+  li: `<line x1="0" y1="52" x2="30" y2="52" stroke="#3a4064" stroke-width="5"/><line x1="218" y1="52" x2="240" y2="52" stroke="#d63a4a" stroke-width="5"/>
+    <rect x="30" y="26" width="182" height="52" rx="10" fill="#1d6fb8"/><rect x="30" y="26" width="182" height="52" rx="10" fill="url(#gl)"/>
+    <rect x="212" y="40" width="8" height="24" rx="3" fill="#d6dae4"/><rect x="30" y="26" width="10" height="52" rx="4" fill="#c7ccd8"/>
+    <defs><linearGradient id="gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".25"/></linearGradient></defs>
+    <text x="121" y="50" text-anchor="middle" font-size="16" font-weight="900" fill="#fff" font-family="system-ui">3,7 V</text><text x="121" y="67" text-anchor="middle" font-size="11" font-weight="700" fill="#cfe6ff" font-family="system-ui">18650 · Li-ion</text>
+    <text x="196" y="22" font-size="14" font-weight="900" fill="#ff8d98">+</text><text x="22" y="22" font-size="16" font-weight="900" fill="#9aa">−</text>`,
+  n9: `<path d="M96 12 C 60 6, 20 30, 0 52" stroke="#2a2e44" stroke-width="5" fill="none"/><path d="M146 12 C 190 6, 220 30, 240 52" stroke="#d63a4a" stroke-width="5" fill="none"/>
+    <rect x="70" y="20" width="102" height="76" rx="7" fill="#1a1c26"/><rect x="70" y="48" width="102" height="30" fill="#e8a33b"/>
+    <rect x="86" y="9" width="20" height="13" rx="2" fill="#bfc4cf"/><circle cx="146" cy="15" r="7" fill="#bfc4cf"/>
+    <text x="121" y="70" text-anchor="middle" font-size="22" font-weight="900" fill="#1a1c26" font-family="system-ui">9 V</text>
+    <text x="121" y="42" text-anchor="middle" font-size="10" font-weight="700" fill="#cfd3dc" font-family="system-ui">ALCALINA</text>
+    <text x="78" y="16" font-size="13" font-weight="900" fill="#9aa">−</text><text x="157" y="16" font-size="13" font-weight="900" fill="#ff8d98">+</text>`,
+  b12: `<path d="M80 16 C 50 16, 20 40, 0 52" stroke="#2a2e44" stroke-width="5" fill="none"/><path d="M162 16 C 192 16, 222 40, 240 52" stroke="#d63a4a" stroke-width="5" fill="none"/>
+    <rect x="52" y="24" width="138" height="74" rx="6" fill="#2b2f3a"/><rect x="52" y="24" width="138" height="12" rx="5" fill="#3a3f4d"/>
+    <rect x="72" y="12" width="16" height="14" rx="2" fill="#1d2030"/><rect x="154" y="12" width="16" height="14" rx="2" fill="#c0283a"/>
+    <rect x="66" y="48" width="110" height="36" rx="4" fill="#3ee08f" opacity=".9"/>
+    <text x="121" y="72" text-anchor="middle" font-size="15" font-weight="900" fill="#0b2a1a" font-family="system-ui">12 V · 7 Ah</text>
+    <text x="74" y="46" font-size="13" font-weight="900" fill="#9aa">−</text><text x="157" y="46" font-size="13" font-weight="900" fill="#ff8d98">+</text>`
+};
+const chipsEl = $('chips');
+chipsEl.innerHTML = Object.entries(BATS).map(([k, b]) => `<button data-bat="${k}" title="${b.name}">${nf(b.v, b.v % 1 ? 1 : 0)} V<small>${b.short}</small></button>`).join('');
+chipsEl.addEventListener('click', e => { const b = e.target.closest('[data-bat]'); if (b) setBat(b.dataset.bat); });
+function setBat(k, quiet) {
+  const h = $('holder');
+  const apply = () => {
+    st.bat = k; const B = BATS[k];
+    $('batSvg').innerHTML = BSVG[k];
+    $('batName').textContent = B.name;
+    const s = $('sV'); s.max = B.v; st.vset = B.v; s.value = B.v;
+    chipsEl.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.bat === k));
+    paintSliders(); h.classList.remove('out');
+  };
+  if (quiet) { apply(); return; }
+  h.classList.add('out'); sPlace(); setTimeout(apply, 260);
+  toast(`Pusiste una ${BATS[k].name}: ${nf(BATS[k].v, 1)} V de voltaje. El regulador quedó al máximo.`, 'info');
+}
+
+/* =========================================================
+   Controles deslizantes
+   ========================================================= */
+function paintSliders() {
+  for (const id of ['sV', 'sI', 'sR']) { const s = $(id); s.style.setProperty('--pct', ((s.value - s.min) / (s.max - s.min || 1) * 100) + '%'); }
+  $('fvV').innerHTML = nf(st.vset, 1) + `<small> V</small>`;
+  $('fvI').innerHTML = nf(st.ilim, 2) + '<small> A</small>';
+  $('fvR').innerHTML = st.reo + '<small> Ω</small>';
+}
+$('sV').addEventListener('input', e => { st.vset = +e.target.value; paintSliders(); });
+$('sI').addEventListener('input', e => { st.ilim = +e.target.value; paintSliders(); });
+$('sR').addEventListener('input', e => { st.reo = +e.target.value; paintSliders(); });
+
+/* Interruptor */
+function setOn(v) {
+  st.on = v; sToggle();
+  const s = $('swMain'); s.classList.toggle('on', v); s.setAttribute('aria-checked', v);
+  $('swTxt').textContent = v ? 'Cerrado: la corriente puede circular' : 'Abierto: el camino está cortado';
+  syncUI(true);
+}
+$('swMain').addEventListener('click', () => setOn(!st.on));
+$('swMain').addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setOn(!st.on); } });
+
+/* =========================================================
+   Cables y partículas (canvas detrás de las tarjetas)
+   ========================================================= */
+const wc = $('wires'), wx = wc.getContext('2d');
+let dpr = 1, SEGS = [], BUSES = [];
+function geo() {
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  const br = board.getBoundingClientRect();
+  wc.width = Math.round(br.width * dpr); wc.height = Math.round(br.height * dpr);
+  wc.style.width = br.width + 'px'; wc.style.height = br.height + 'px';
+  const rel = el => { const r = el.getBoundingClientRect(); return { l: r.left - br.left, t: r.top - br.top, r: r.right - br.left, b: r.bottom - br.top, cx: (r.left + r.right) / 2 - br.left, cy: (r.top + r.bottom) / 2 - br.top }; };
+  SEGS = []; BUSES = [];
+  const jp = rel($('jackP')), jm = rel($('jackM')), cr = rel(circ);
+  for (const g of chain) {
+    const gr = rel(g.el), L = gr.l + 13, R = gr.r - 13;
+    const ys = g.items.map(e => { const c = rel(e.el); e.box = c; return c.cy; });
+    const y0 = Math.min(...ys), y1 = Math.max(...ys), my = (y0 + y1) / 2;
+    g.in = [L, my]; g.out = [R, my]; g.rect = gr;
+    if (y1 - y0 > 1) BUSES.push([[L, y0], [L, y1]], [[R, y0], [R, y1]]);
+    for (const e of g.items) {
+      SEGS.push({ pts: [[L, e.box.cy], [e.box.l, e.box.cy]], I: () => e.I, col: '#e0a04a' });
+      SEGS.push({ pts: [[e.box.r, e.box.cy], [R, e.box.cy]], I: () => e.I, col: '#e0a04a' });
+    }
+  }
+  const g0 = chain[0], laneX = jp.cx + 18, topY = rel($('bsub')).t - 14;
+  SEGS.push({ pts: [[jp.cx, jp.cy], [laneX, jp.cy], [laneX, topY], [g0.in[0] - 20, topY], [g0.in[0] - 20, g0.in[1]], g0.in], I: () => E.I, col: '#ff5a6a', main: true });
+  for (let k = 0; k < chain.length - 1; k++) {
+    const a = chain[k].out, b = chain[k + 1].in, ra = chain[k].rect, rb = chain[k + 1].rect;
+    let pts;
+    if (b[0] > a[0] && rb.t < ra.b && rb.b > ra.t) { const mx = (a[0] + b[0]) / 2; pts = [a, [mx, a[1]], [mx, b[1]], b]; }
+    else { const yg = (ra.b + rb.t) / 2 + (rb.t > ra.b ? 0 : 20); pts = [a, [a[0] + 20, a[1]], [a[0] + 20, Math.max(yg, ra.b + 14)], [b[0] - 20, Math.max(yg, ra.b + 14)], [b[0] - 20, b[1]], b]; }
+    SEGS.push({ pts, I: () => E.I, col: '#e0a04a' });
+  }
+  const gl = chain[chain.length - 1], botY = cr.b + 16;
+  SEGS.push({ pts: [gl.out, [gl.out[0] + 20, gl.out[1]], [gl.out[0] + 20, botY], [15, botY], [15, jm.cy], [jm.cx, jm.cy]], I: () => E.I, col: '#6d78a8', main: true });
+  for (const s of SEGS) { s.len = 0; s.cum = [0]; for (let k = 1; k < s.pts.length; k++) { s.len += Math.hypot(s.pts[k][0] - s.pts[k - 1][0], s.pts[k][1] - s.pts[k - 1][1]); s.cum.push(s.len); } s.ph = s.ph || 0; }
+}
+new ResizeObserver(() => requestAnimationFrame(geo)).observe(board);
+window.addEventListener('resize', () => requestAnimationFrame(geo));
+function ptAt(s, d) {
+  d = ((d % s.len) + s.len) % s.len;
+  let k = 1; while (k < s.cum.length - 1 && s.cum[k] < d) k++;
+  const t = (d - s.cum[k - 1]) / ((s.cum[k] - s.cum[k - 1]) || 1), a = s.pts[k - 1], b = s.pts[k];
+  return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), Math.atan2(b[1] - a[1], b[0] - a[0])];
+}
+let T = 0;
+function drawWires(dt) {
+  const c = wx; c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, wc.width, wc.height);
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  const live = E.I > 1e-5;
+  const stroke = (pts, col, w) => { c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.strokeStyle = col; c.lineWidth = w; c.stroke(); };
+  for (const b of BUSES) { stroke(b, 'rgba(0,0,0,.55)', 9); stroke(b, '#c98a3a', 5); }
+  for (const s of SEGS) {
+    stroke(s.pts, 'rgba(0,0,0,.55)', s.main ? 8 : 7);
+    stroke(s.pts, s.col, s.main ? 4.5 : 3.5);
+    if (live && s.I() > 1e-5) { c.globalAlpha = .25; stroke(s.pts, s.col, 10); c.globalAlpha = 1; }
+  }
+  if (!st.parts) return;
+  c.globalCompositeOperation = 'lighter';
+  const dir = st.emode === 'e' ? -1 : 1;
+  for (const s of SEGS) {
+    const I = s.I(); if (I < 1e-5) continue;
+    const v = 18 + 150 * Math.sqrt(Math.min(I, 3));
+    s.ph += v * dt * dir;
+    const sp = 18, n = Math.floor(s.len / sp);
+    for (let k = 0; k < n; k++) {
+      const [x, y, a] = ptAt(s, k * sp + s.ph);
+      if (st.emode === 'e') {
+        const g = c.createRadialGradient(x, y, 0, x, y, 7);
+        g.addColorStop(0, 'rgba(190,240,255,1)'); g.addColorStop(.35, 'rgba(63,193,255,.75)'); g.addColorStop(1, 'rgba(63,193,255,0)');
+        c.fillStyle = g; c.beginPath(); c.arc(x, y, 7, 0, TAU); c.fill();
+      } else {
+        c.save(); c.translate(x, y); c.rotate(a); c.fillStyle = 'rgba(255,225,77,.95)';
+        c.beginPath(); c.moveTo(5, 0); c.lineTo(-4, -4); c.lineTo(-4, 4); c.closePath(); c.fill(); c.restore();
+      }
+    }
+  }
+  c.globalCompositeOperation = 'source-over';
+}
+
+/* =========================================================
+   Dibujo animado dentro de cada actuador
+   ========================================================= */
+function drawAct(e) {
+  const c = e.cx, W = 156, H = 58;
+  c.setTransform(2, 0, 0, 2 * 50 / 58, 0, 0); c.clearRect(0, 0, W, H);
+  c.lineCap = 'round';
+  const cx = 70, cy = 29;
+  switch (e.type) {
+    case 'bulb': {
+      const b = e.burned ? 0 : clamp(e.P / 1.1, 0, 1.6);
+      if (b > 0.01) { glow(c, cx, cy - 4, 14 + 26 * Math.min(1, b), `rgba(255,${(170 + 70 * Math.min(1, b)) | 0},90,${Math.min(1, .25 + .7 * b)})`); }
+      c.fillStyle = e.burned ? '#2a2e3c' : `rgba(255,${(200 + 40 * Math.min(1, b)) | 0},150,${.12 + .55 * Math.min(1, b)})`;
+      c.strokeStyle = '#8f9bc8'; c.lineWidth = 1.5;
+      c.beginPath(); c.arc(cx, cy - 4, 14, Math.PI * .8, Math.PI * .2, false); c.lineTo(cx + 6, cy + 13); c.lineTo(cx - 6, cy + 13); c.closePath(); c.fill(); c.stroke();
+      c.strokeStyle = b > 0.01 ? `rgb(255,${(150 + 100 * Math.min(1, b)) | 0},${(60 + 160 * Math.min(1, b)) | 0})` : '#6d6050'; c.lineWidth = 1.6;
+      c.beginPath(); c.moveTo(cx - 4, cy + 10); c.lineTo(cx - 4, cy - 2);
+      if (!e.burned) { for (let k = 0; k < 4; k++) c.lineTo(cx - 3 + k * 2, cy - (k % 2 ? 6 : 2)); }
+      c.moveTo(cx + 4, cy + 10); c.lineTo(cx + 4, cy - 2); c.stroke();
+      c.fillStyle = '#9aa2bd'; c.fillRect(cx - 6, cy + 13, 12, 9); c.fillStyle = '#6a7290'; c.fillRect(cx - 6, cy + 16, 12, 2); c.fillRect(cx - 6, cy + 19, 12, 2);
+      break;
+    }
+    case 'led': {
+      const b = e.burned ? 0 : clamp(e.I / 0.02, 0, 1.5);
+      if (b > 0.02) glow(c, cx, cy - 6, 10 + 24 * Math.min(1, b), `rgba(255,50,70,${Math.min(1, .2 + .7 * b)})`);
+      c.strokeStyle = '#aab'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(cx - 4, cy + 6); c.lineTo(cx - 4, cy + 24); c.moveTo(cx + 4, cy + 6); c.lineTo(cx + 4, cy + 20); c.stroke();
+      c.fillStyle = e.burned ? '#3a2228' : `rgb(${(130 + 125 * Math.min(1, b)) | 0},${(20 + 60 * Math.min(1, b)) | 0},${(35 + 40 * Math.min(1, b)) | 0})`;
+      c.beginPath(); c.arc(cx, cy - 6, 9, Math.PI, 0); c.lineTo(cx + 9, cy + 6); c.lineTo(cx - 9, cy + 6); c.closePath(); c.fill();
+      c.fillRect(cx - 11, cy + 4, 22, 3);
+      c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.ellipse(cx - 3, cy - 9, 2.5, 4, -.4, 0, TAU); c.fill();
+      if (e.burned) { c.strokeStyle = '#111'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(cx - 5, cy - 10); c.lineTo(cx + 1, cy - 3); c.lineTo(cx - 2, cy + 3); c.stroke(); }
+      c.fillStyle = '#7f8ab8'; c.font = '700 9px system-ui'; c.textAlign = 'left'; c.fillText('+', cx + 8, cy + 22); c.fillText('−', cx - 14, cy + 22);
+      break;
+    }
+    case 'motor': {
+      c.fillStyle = e.burned ? '#2b2a30' : '#36508f'; c.fillRect(cx - 40, cy - 14, 40, 28);
+      c.fillStyle = '#9aa2bd'; c.fillRect(cx - 44, cy - 10, 4, 20); c.fillRect(cx, cy - 2, 14, 4);
+      c.fillStyle = '#c9a23b'; c.fillRect(cx - 32, cy - 14, 3, 28); c.fillRect(cx - 12, cy - 14, 3, 28);
+      const fx = cx + 30;
+      c.save(); c.translate(fx, cy); c.rotate(e.ang);
+      const n = e.spd > 1.2 ? 3 : 1;
+      for (let s = 0; s < n; s++) {
+        c.globalAlpha = s ? 0.25 : 1; c.rotate(s ? -0.18 : 0);
+        for (let k = 0; k < 3; k++) { c.rotate(TAU / 3); c.fillStyle = e.burned ? '#444' : '#3ee08f'; c.beginPath(); c.ellipse(11, 0, 11, 4.5, 0, 0, TAU); c.fill(); }
+      }
+      c.restore(); c.globalAlpha = 1;
+      c.fillStyle = '#d7dcef'; c.beginPath(); c.arc(fx, cy, 3.5, 0, TAU); c.fill();
+      c.fillStyle = '#7f8ab8'; c.font = '700 9px ui-monospace,monospace'; c.textAlign = 'left';
+      c.fillText(Math.round(e.spd * 6 * 1100) + ' rpm', 4, 54);
+      if (e.V > 7.5 && !e.burned) glow(c, cx - 20, cy, 26, `rgba(255,90,40,${clamp((e.V - 7.5) / 4, 0, .6)})`);
+      break;
+    }
+    case 'buzzer': {
+      const on = !e.burned && e.V >= 1, a = on ? clamp(e.P / 0.6, .25, 1) : 0;
+      c.fillStyle = '#15171f'; c.beginPath(); c.arc(cx - 18, cy, 17, 0, TAU); c.fill();
+      c.strokeStyle = '#3a3f55'; c.lineWidth = 2; c.stroke();
+      c.fillStyle = '#05060a'; c.beginPath(); c.arc(cx - 18, cy, 4, 0, TAU); c.fill();
+      if (on) for (let k = 0; k < 4; k++) {
+        const f = (T * (1.2 + e.V / 6) + k / 4) % 1;
+        c.strokeStyle = `rgba(185,140,255,${(1 - f) * a})`; c.lineWidth = 2;
+        c.beginPath(); c.arc(cx - 18, cy, 20 + f * 34, -0.7, 0.7); c.stroke();
+      }
+      c.fillStyle = '#7f8ab8'; c.font = '700 9px ui-monospace,monospace'; c.textAlign = 'left';
+      c.fillText(on ? `${Math.round(40 + 40 * a)} dB` : 'silencio', 4, 54);
+      break;
+    }
+    case 'heater': {
+      const t = clamp((e.T - 25) / 200, 0, 1);
+      const col = t < .5 ? `rgb(${(70 + 370 * t) | 0},${(70 - 40 * t) | 0},${(80 - 60 * t) | 0})` : `rgb(255,${(50 + 380 * (t - .5)) | 0},${(20 + 120 * (t - .5)) | 0})`;
+      if (t > .15) glow(c, cx - 12, cy, 40, `rgba(255,${(80 + 120 * t) | 0},40,${.15 + .45 * t})`);
+      c.strokeStyle = col; c.lineWidth = 3.2; c.beginPath(); c.moveTo(cx - 52, cy);
+      for (let k = 0; k <= 10; k++) c.lineTo(cx - 48 + k * 7.5, cy + (k % 2 ? -10 : 10));
+      c.lineTo(cx + 34, cy); c.stroke();
+      // termómetro
+      const tx = 136; c.fillStyle = '#0e1430'; c.fillRect(tx - 4, 6, 8, 38); c.beginPath(); c.arc(tx, 46, 7, 0, TAU); c.fill();
+      c.fillStyle = '#ff5a3a'; const h = clamp((e.T - 20) / 230, 0, 1) * 34; c.fillRect(tx - 2, 44 - h, 4, h); c.beginPath(); c.arc(tx, 46, 5, 0, TAU); c.fill();
+      c.fillStyle = '#ffd2a8'; c.font = '700 9px ui-monospace,monospace'; c.textAlign = 'right'; c.fillText(Math.round(e.T) + ' °C', tx - 10, 54);
+      if (st.heat !== false && t > .05) for (let k = 0; k < 3; k++) { const f = (T * .8 + k / 3) % 1; c.strokeStyle = `rgba(255,140,80,${(1 - f) * t})`; c.lineWidth = 1.5; c.beginPath(); const x0 = cx - 34 + k * 22; c.moveTo(x0, cy - 12 - f * 14); c.quadraticCurveTo(x0 + 4, cy - 16 - f * 14, x0, cy - 20 - f * 14); c.stroke(); }
+      break;
+    }
+    case 'sw': {
+      c.fillStyle = '#0e1430'; c.fillRect(cx - 46, cy + 8, 92, 10);
+      c.fillStyle = '#c9cfe6'; c.beginPath(); c.arc(cx - 30, cy + 8, 5, 0, TAU); c.fill(); c.beginPath(); c.arc(cx + 30, cy + 8, 5, 0, TAU); c.fill();
+      const a = st.on ? 0 : -0.55;
+      c.save(); c.translate(cx - 30, cy + 8); c.rotate(a); c.strokeStyle = st.on ? '#3ee08f' : '#ff5a6a'; c.lineWidth = 5; c.beginPath(); c.moveTo(0, 0); c.lineTo(60, 0); c.stroke(); c.restore();
+      c.fillStyle = st.on ? '#3ee08f' : '#ff5a6a'; c.font = '800 10px system-ui'; c.textAlign = 'center'; c.fillText(st.on ? 'CERRADO' : 'ABIERTO', cx, 11);
+      break;
+    }
+    case 'reo': {
+      c.strokeStyle = '#ffb13b'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(8, 38);
+      for (let k = 0; k <= 12; k++) c.lineTo(20 + k * 9, 38 + (k % 2 ? -7 : 7));
+      c.lineTo(148, 38); c.stroke();
+      const x = 20 + 108 * (st.reo / 200);
+      c.strokeStyle = '#e9edff'; c.fillStyle = '#e9edff'; c.lineWidth = 2; c.beginPath(); c.moveTo(x, 6); c.lineTo(x, 24); c.stroke();
+      c.beginPath(); c.moveTo(x - 5, 22); c.lineTo(x + 5, 22); c.lineTo(x, 30); c.closePath(); c.fill();
+      c.fillStyle = '#ffc978'; c.font = '800 10px ui-monospace,monospace'; c.textAlign = 'left'; c.fillText(st.reo + ' Ω', x + 7 > 112 ? x - 44 : x + 7, 16);
+      if (e.P > 0.2) glow(c, 78, 38, 40, `rgba(255,120,40,${clamp(e.P / 4, 0, .5)})`);
+      break;
+    }
+  }
+  for (const s of e.smoke) { c.fillStyle = `rgba(150,150,160,${.5 * (1 - s.t / 1.6)})`; c.beginPath(); c.arc(s.x, s.y, 3 + s.t * 5, 0, TAU); c.fill(); }
+}
+function glow(c, x, y, r, col) {
+  const g = c.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.save(); c.globalCompositeOperation = 'lighter'; c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); c.restore();
+}
+
+/* =========================================================
+   Lecturas y panel
+   ========================================================= */
+function effR(e) {
+  if (e.type === 'sw') return st.on ? 0 : Infinity;
+  if (e.type === 'reo') return st.reo;
+  if (e.burned) return Infinity;
+  if (e.type === 'led') return e.I > 1e-6 ? e.V / e.I : Infinity;
+  return TYPES[e.type].R;
+}
+function status(e) {
+  if (e.burned) return ['QUEMADO', '#ff5a6a'];
+  if (e.type === 'led') { if (e.V < LED_VF && e.V > 0.05) return ['falta voltaje', '#ffb13b']; if (e.I > 0.03) return ['¡peligro!', '#ff5a6a']; }
+  if (e.type === 'bulb' && e.P > 2.5) return ['¡muy caliente!', '#ff5a6a'];
+  if (e.type === 'motor' && e.V > 7.5) return ['se recalienta', '#ff5a6a'];
+  if (e.type === 'motor' && e.V > 0.05 && e.V <= 0.6) return ['no arranca', '#ffb13b'];
+  if (e.type === 'buzzer' && e.V > 0.05 && e.V < 1) return ['no suena', '#ffb13b'];
+  if (e.type === 'heater' && e.T > 120) return ['¡quema!', '#ff5a6a'];
+  return null;
+}
+let lastDiag = '', uiT = 0;
+function syncUI(force) {
+  solve();
+  for (const g of chain) for (const e of g.items) {
+    e.q.v.textContent = fV(e.V); e.q.i.textContent = fA(e.I); e.q.r.textContent = fR(effR(e)); e.q.p.textContent = fW(e.P);
+    const s = status(e); e.q.tag.style.display = s ? 'block' : 'none'; if (s) { e.q.tag.textContent = s[0]; e.q.tag.style.color = s[1]; }
+  }
+  const B = BATS[st.bat];
+  $('batVt').textContent = fV(E.Vt);
+  $('mV').textContent = nf(E.Vout, 2); $('mI').textContent = nf(E.I, 3); $('mR').textContent = isFinite(E.R) ? nf(E.R, 1) : 'O.L'; $('mP').textContent = nf(E.P, 2);
+  $('mCV').classList.toggle('on', E.mode === 'CV' && E.I > 0); $('mCC').classList.toggle('on', E.mode === 'CC'); $('ccLed').classList.toggle('on', E.mode === 'CC');
+  $('dur').innerHTML = E.I > 1e-4 ? `Con ${fA(E.I)} esta batería de ${B.mah} mAh dura ≈ <b>${dur(B.mah / (E.I * 1000))}</b>` : `Batería de ${B.mah} mAh · sin consumo`;
+  $('cV').textContent = fV(E.Vout); $('cI').textContent = fA(E.I); $('cR').textContent = fR(E.R); $('cP').textContent = fW(E.P);
+  // Ley de Ohm
+  const sel = st.sel && findItem(st.sel);
+  let h = `<b>Todo el circuito</b><br><span class="cv">${fV(E.Vout)}</span> = <span class="ci">${fA(E.I)}</span> × <span class="cr">${fR(E.R)}</span>`;
+  if (sel) { const nm = sel.type === 'sw' ? 'Interruptor' : sel.type === 'reo' ? 'Reóstato' : TYPES[sel.type].name; h += `<br><b>${nm}</b><br><span class="cv">${fV(sel.V)}</span> = <span class="ci">${fA(sel.I)}</span> × <span class="cr">${fR(effR(sel))}</span>`; }
+  $('eq').innerHTML = h;
+  if (sel) $('insp').innerHTML = explain(sel);
+  const d = diagnose().map(([c, t]) => `<li class="${c}"><div>${t}</div></li>`).join('');
+  if (d !== lastDiag) { $('diag').innerHTML = d; lastDiag = d; }
+}
+function dur(h) { if (!isFinite(h)) return '—'; if (h < 1) return Math.max(1, Math.round(h * 60)) + ' min'; if (h < 48) return nf(h, 1) + ' h'; return Math.round(h / 24) + ' días'; }
+function groupOf(e) { return chain.find(g => g.items.includes(e)); }
+function explain(e) {
+  const g = groupOf(e), par = g.items.length > 1;
+  if (e.type === 'sw') return `<b>🔘 Interruptor</b><br>${st.on ? 'Está <b>cerrado</b>: une el camino y casi no tiene resistencia, por eso su voltaje es ≈ 0 V.' : `Está <b>abierto</b>: corta el único camino. Mira: todo el voltaje (${fV(e.V)}) queda entre sus contactos, pero no pasa corriente.`}`;
+  if (e.type === 'reo') return `<b>〰️ Reóstato</b><br>Es una resistencia que puedes cambiar con el control <b>Resistencia</b>. Ahora vale ${st.reo} Ω y se queda con ${fV(e.V)} del voltaje. Esa energía la convierte en <b>calor</b> (${fW(e.P)}). Más resistencia → menos corriente para todos.`;
+  const T = TYPES[e.type];
+  let t = `<b>${T.icon} ${T.name}</b> · convierte la energía en <b>${T.man.toLowerCase()}</b><br>`;
+  t += par ? `Está en <b>paralelo</b> con ${g.items.length - 1} más: todos reciben el mismo voltaje (${fV(e.V)}) y cada uno toma su propia corriente.<br>` : chain.filter(x => x.kind === 'g').length > 1 ? `Está en <b>serie</b>: comparte la misma corriente (${fA(E.I)}) con los demás grupos y se queda con una parte del voltaje.<br>` : '';
+  if (e.burned) return t + 'Está <b>quemado</b>: ya no deja pasar corriente (circuito abierto). Usa “Cambiar por uno nuevo”.';
+  switch (e.type) {
+    case 'bulb': return t + `Con ${fV(e.V)} pasa ${fA(e.I)} y consume ${fW(e.P)}. Brilla al ${Math.round(clamp(e.P / 1.1, 0, 1.6) * 100)} %. Solo ~5 % se vuelve luz; el resto es calor.`;
+    case 'led': return t + (e.V < LED_VF ? `Un LED es un diodo: <b>necesita al menos 1,9 V</b> para encender. Ahora tiene ${fV(e.V)}, así que casi no pasa corriente.` : `Pasan ${fA(e.I)} (máximo seguro 35 mA). Su resistencia no es fija: R = V ÷ I = ${fR(effR(e))}. Trae una resistencia de 100 Ω incluida.`);
+    case 'motor': return t + `Gira a ≈ ${Math.round(e.spd * 6 * 1100)} rpm. Más voltaje = más rápido. Consume ${fW(e.P)}; cerca del 85 % se vuelve movimiento.`;
+    case 'buzzer': return t + (e.V < 1 ? 'Con menos de 1 V no alcanza a vibrar.' : `Una lámina vibra miles de veces por segundo y mueve el aire: eso es el <b>sonido</b>. Consume ${fW(e.P)}.`);
+    case 'heater': return t + `Toda la energía (${fW(e.P)}) se vuelve calor. Temperatura: ${Math.round(e.T)} °C. Así funcionan las planchas, secadores y duchas eléctricas.`;
+  }
+  return t;
+}
+function diagnose() {
+  const m = [], B = BATS[st.bat], gs = chain.filter(g => g.kind === 'g');
+  if (!gs.length) m.push(['info', '<b>Tablero vacío.</b> Toca <b>+ serie</b> para añadir tu primer actuador.']);
+  if (!st.on) m.push(['bad', `<b>Interruptor abierto.</b> No hay un camino cerrado, así que la corriente es 0. Todo el voltaje (${fV(E.Vout)}) aparece entre los contactos del interruptor.`]);
+  else if (E.open && E.open.kind === 'g') m.push(['bad', '<b>Circuito abierto.</b> Un grupo en serie no deja pasar corriente (actuador quemado). En serie hay un solo camino: si se corta, todo se apaga.']);
+  if (st.vset === 0) m.push(['warn', '<b>Voltaje en 0.</b> Sin voltaje no hay “empuje” para los electrones. Sube el control de voltaje.']);
+  if (E.mode === 'CC') m.push(['warn', `<b>Límite de amperaje alcanzado.</b> El circuito pedía más de ${fA(st.ilim)}, así que la fuente bajó el voltaje a ${fV(E.Vout)} para no pasar del límite.`]);
+  if (E.I > 0 && st.vset - E.Vout > 0.15 && E.mode === 'CV') m.push(['warn', `<b>La batería se cansa.</b> Tiene resistencia interna (${nf(B.r, 2)} Ω): al entregar ${fA(E.I)} pierde ${fV(E.I * B.r)} por dentro y solo llegan ${fV(E.Vout)}.`]);
+  if (E.I > 0 && gs.length > 1) m.push(['info', `<b>Serie:</b> la corriente es la misma en cada grupo (${fA(E.I)}) y el voltaje se reparte: ${gs.map(g => fV(g.V)).join(' + ')}${st.reo ? ' + ' + fV(chain[1].V) + ' (reóstato)' : ''} = ${fV(E.Vout)}.`]);
+  const pg = gs.find(g => g.items.length > 1);
+  if (E.I > 0 && pg) m.push(['info', `<b>Paralelo:</b> en un grupo todos reciben el mismo voltaje (${fV(pg.V)}) y la corriente se suma: ${pg.items.map(e => fA(e.I)).join(' + ')}.`]);
+  for (const g of gs) for (const e of g.items) {
+    if (e.type === 'led' && !e.burned && e.V > 0.05 && e.V < LED_VF) { m.push(['warn', `<b>El LED no enciende:</b> necesita 1,9 V y solo recibe ${fV(e.V)}. Prueba otra batería o quítale actuadores en serie.`]); break; }
+    if (e.type === 'led' && !e.burned && e.I > 0.03) { m.push(['bad', `<b>¡El LED va a quemarse!</b> Pasan ${fA(e.I)}. Sube la resistencia del reóstato para limitar la corriente.`]); break; }
+    if (e.type === 'bulb' && !e.burned && e.P > 2.5) { m.push(['bad', `<b>¡El bombillo se va a fundir!</b> Consume ${fW(e.P)} y está hecho para 1,1 W. Baja el voltaje.`]); break; }
+  }
+  if (st.reo > 0 && E.I > 0) m.push(['info', `<b>Reóstato:</b> sus ${st.reo} Ω se quedan con ${fV(chain[1].V)} y lo convierten en calor. Más resistencia → menos corriente (I = V ÷ R).`]);
+  if (E.I > 0 && !m.some(x => x[0] === 'bad' || x[0] === 'warn')) m.push(['ok', `<b>Todo funciona.</b> La batería de ${nf(B.v, 1)} V entrega ${fA(E.I)} y el circuito consume ${fW(E.P)}.`]);
+  return m.slice(0, 6);
+}
+
+/* =========================================================
+   Etiquetas, opciones, toast
+   ========================================================= */
+let labels = true;
+const stage = $('stage');
+function setLabels(v) {
+  labels = v; st.labels = v; $('chkL').checked = v;
+  const b = $('lblBtn'); b.classList.toggle('on', v); b.setAttribute('aria-pressed', v);
+  stage.classList.toggle('clean', !v);
+}
+$('lblBtn').addEventListener('click', () => setLabels(!labels));
+$('chkL').addEventListener('change', e => setLabels(e.target.checked));
+$('chkRo').addEventListener('change', e => { st.ro = e.target.checked; board.classList.toggle('hideRo', !st.ro); requestAnimationFrame(geo); });
+$('chkP').addEventListener('change', e => st.parts = e.target.checked);
+$('chkS').addEventListener('change', e => { st.sound = e.target.checked; ensureAudio(); });
+$('seg').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (!b) return; st.emode = b.dataset.m; $('seg').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); $('legE').textContent = st.emode === 'e' ? 'Electrones (van de − a +)' : 'Corriente convencional (de + a −)'; });
+$('fsBtn').addEventListener('click', () => { if (!document.fullscreenElement) stage.requestFullscreen?.().catch(() => {}); else document.exitFullscreen?.(); });
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' && e.target.type === 'range') return;
+  const k = e.key.toLowerCase();
+  if (k === 'e') setLabels(!labels);
+  else if (k === 'f') $('fsBtn').click();
+  else if (k === ' ' && !e.target.closest('button,.act,[role=switch]')) { e.preventDefault(); setOn(!st.on); }
+  else { const b = Object.keys(BATS).find(x => BATS[x].key === k); if (b) setBat(b); }
+});
+let toastT = 0;
+function toast(msg, kind) { const t = $('toast'); t.textContent = msg; t.className = 'toast show' + (kind ? ' ' + kind : ''); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 4500); }
+
+/* =========================================================
+   Experimentos (presets)
+   ========================================================= */
+function cfg(bat, groups, o = {}) {
+  setBat(bat, true); resetChain(groups);
+  st.reo = o.reo || 0; $('sR').value = st.reo;
+  st.ilim = o.ilim || 2; $('sI').value = st.ilim;
+  if (o.v !== undefined) { st.vset = o.v; $('sV').value = o.v; }
+  st.sel = null; if (!st.on) setOn(true);
+  paintSliders(); rebuild();
+}
+const PRESETS = [
+  { n: '💡 Un bombillo', d: 'Batería de 3,7 V', f: () => cfg('li', [['bulb']]) },
+  { n: '🔗 Serie', d: '3 bombillos: brillan poco', f: () => cfg('li', [['bulb'], ['bulb'], ['bulb']]) },
+  { n: '🔀 Paralelo', d: '3 bombillos: brillan igual', f: () => cfg('li', [['bulb', 'bulb', 'bulb']]) },
+  { n: '🔴 LED con 1,5 V', d: '¿Por qué no enciende?', f: () => cfg('aa', [['led']]) },
+  { n: '💥 LED con 12 V', d: 'Sin protección… ¡se quema!', f: () => cfg('b12', [['led']]) },
+  { n: '🛡️ LED protegido', d: '12 V + reóstato de 200 Ω', f: () => cfg('b12', [['led']], { reo: 200 }) },
+  { n: '⚡ Las 4 energías', d: 'Luz, movimiento, sonido y calor', f: () => cfg('n9', [['bulb', 'motor', 'buzzer', 'heater']], { v: 4 }) },
+  { n: '🚦 Límite de corriente', d: 'Calefactor con 0,3 A máx.', f: () => cfg('b12', [['heater']], { ilim: 0.3 }) }
+];
+$('presets').innerHTML = PRESETS.map((p, i) => `<button data-p="${i}"><b>${p.n}</b>${p.d}</button>`).join('');
+$('presets').addEventListener('click', e => { const b = e.target.closest('[data-p]'); if (!b) return; PRESETS[+b.dataset.p].f(); sPlace(); syncUI(true); });
+
+/* =========================================================
+   Recorrido guiado
+   ========================================================= */
+const TOUR = [
+  { sel: '#bay', t: '<b>1 · La batería</b> es la fuente de energía. Tiene un polo <b>+</b> y un polo <b>−</b>. Elige entre 1,5 V, 3,7 V, 9 V o 12 V: el <b>voltaje</b> es la fuerza que empuja a los electrones.' },
+  { sel: '#fV', t: '<b>2 · Control de voltaje.</b> Funciona como un regulador: decide cuánto voltaje llega al circuito, desde 0 hasta el de la batería. Muévelo y mira cómo cambia el brillo.' },
+  { sel: '#fI', t: '<b>3 · Control de amperaje.</b> Es un límite de seguridad: si el circuito pide más corriente, la fuente la frena y baja el voltaje. Cuando pasa, se enciende la luz naranja y aparece <b>CC</b>.' },
+  { sel: '#fR', t: '<b>4 · Control de resistencia.</b> Un reóstato en serie: “frena” la corriente. Más resistencia = menos corriente (I = V ÷ R). Sirve para proteger un LED.' },
+  { sel: '#meter', t: '<b>5 · Consumo total.</b> El multímetro muestra el voltaje (V), la corriente (A), la resistencia total (Ω) y la potencia (W) de todo el circuito. También cuánto durará la batería.' },
+  { sel: '#addS', t: '<b>6 · + serie.</b> Añade un actuador en <b>serie</b>: uno detrás de otro, un solo camino. La corriente es la misma para todos y el voltaje se reparte.' },
+  { sel: '.addp', t: '<b>7 · + paralelo.</b> Añade un actuador en <b>paralelo</b>: un camino aparte. Todos reciben el mismo voltaje y la corriente total se suma.' },
+  { sel: '.grp:not(.fixed) .act', t: '<b>8 · Cada actuador</b> muestra su propio voltaje (V), corriente (I), resistencia (R) y potencia (P). Comprueba que V = I × R. Tócalo para ver la explicación.' },
+  { sel: '#ohm', t: '<b>9 · Ley de Ohm en vivo.</b> Aquí ves la fórmula con los números reales del circuito y del actuador que elegiste. ¡Ahora prueba los experimentos!' }
+];
+const tour = { on: false, i: 0 };
+$('tourDots').innerHTML = TOUR.map(() => '<i></i>').join('');
+function tourShow() {
+  document.querySelectorAll('.pulse').forEach(x => x.classList.remove('pulse'));
+  const s = TOUR[tour.i], el = document.querySelector(s.sel);
+  if (el) { el.classList.add('pulse'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  $('capTxt').innerHTML = s.t; $('caption').style.display = 'block'; $('tourTxt').innerHTML = s.t;
+  $('tourGo').textContent = tour.i < TOUR.length - 1 ? `Siguiente (${tour.i + 1}/${TOUR.length})` : 'Terminar';
+  $('capNext').textContent = tour.i < TOUR.length - 1 ? 'Siguiente ▶' : 'Terminar ✓';
+  $('tourDots').querySelectorAll('i').forEach((d, k) => d.classList.toggle('on', k <= tour.i));
+  sClick();
+}
+function tourNext() { if (!tour.on) { tour.on = true; tour.i = 0; } else if (tour.i < TOUR.length - 1) tour.i++; else return tourStop(); tourShow(); }
+function tourStop() { tour.on = false; document.querySelectorAll('.pulse').forEach(x => x.classList.remove('pulse')); $('caption').style.display = 'none'; $('tourTxt').textContent = 'Conoce cada parte del tablero y aprende a leer voltaje, corriente y resistencia.'; $('tourGo').textContent = 'Iniciar recorrido'; $('tourDots').querySelectorAll('i').forEach(d => d.classList.remove('on')); }
+$('tourGo').addEventListener('click', tourNext); $('capNext').addEventListener('click', tourNext);
+$('capPrev').addEventListener('click', () => { if (tour.on && tour.i > 0) { tour.i--; tourShow(); } });
+$('tourEnd').addEventListener('click', tourStop); $('capEnd').addEventListener('click', tourStop);
+
+/* ¿Sabías que…? */
+const FACTS = [
+  'Una batería de 9 V por dentro tiene 6 pilitas de 1,5 V conectadas en serie: 6 × 1,5 V = 9 V. ¡En serie los voltajes se suman!',
+  'La batería de un carro es de 12 V: tiene 6 celdas de plomo y ácido de 2 V cada una, en serie.',
+  'La batería 18650 de 3,7 V es de litio: la usan las linternas recargables, los portátiles y muchos robots escolares.',
+  'Las baterías tienen “resistencia interna”. La de 9 V tiene mucha (≈ 1,7 Ω): por eso se cansa rápido con motores.',
+  'Un LED es un diodo: solo deja pasar corriente en un sentido y necesita un voltaje mínimo para encender. Siempre se usa con una resistencia.',
+  'Georg Simon Ohm publicó su ley en 1827: V = I × R. La unidad de resistencia, el ohmio (Ω), lleva su nombre.',
+  'mAh significa miliamperios-hora: una pila de 2.500 mAh puede dar 250 mA durante unas 10 horas.',
+  'En paralelo cada aparato recibe el mismo voltaje. Por eso en tu casa todos los enchufes están conectados en paralelo.'
+];
+let fi = 0; const showFact = () => $('fact').textContent = FACTS[fi % FACTS.length];
+$('factNext').addEventListener('click', () => { fi++; showFact(); }); showFact();
+
+/* =========================================================
+   Sonido (Web Audio API)
+   ========================================================= */
+let AC = null, buzz = null;
+function ensureAudio() { if (!AC && st.sound) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { AC = null; } } if (AC && AC.state === 'suspended') AC.resume(); }
+function tone(f, d, type = 'sine', vol = .1, glide) {
+  if (!st.sound) return; ensureAudio(); if (!AC) return;
+  const o = AC.createOscillator(), g = AC.createGain(), t0 = AC.currentTime;
+  o.type = type; o.frequency.setValueAtTime(f, t0); if (glide) o.frequency.exponentialRampToValueAtTime(Math.max(20, glide), t0 + d);
+  g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(.0001, t0 + d); o.connect(g); g.connect(AC.destination); o.start(t0); o.stop(t0 + d + .02);
+}
+const sClick = () => tone(1400, .05, 'square', .04);
+const sPlace = () => { tone(700, .06, 'triangle', .08); setTimeout(() => tone(1050, .07, 'triangle', .08), 55); };
+const sToggle = sPlace;
+const sPop = () => tone(220, .35, 'sawtooth', .14, 40);
+function updateAudio() {
+  let v = 0; for (const g of chain) for (const e of g.items) if (e.type === 'buzzer' && !e.burned && e.V >= 1) v = Math.max(v, clamp(e.P / 0.6, .25, 1));
+  const want = st.sound && AC && v > 0;
+  if (want && !buzz) { const o = AC.createOscillator(), g = AC.createGain(); o.type = 'square'; o.frequency.value = 1900; g.gain.value = 0; o.connect(g); g.connect(AC.destination); o.start(); buzz = { o, g }; }
+  if (buzz) { if (!want) { const b = buzz; buzz = null; b.g.gain.setTargetAtTime(0, AC.currentTime, .03); b.o.stop(AC.currentTime + .2); } else buzz.g.gain.setTargetAtTime(.012 * v, AC.currentTime, .05); }
+}
+
+/* =========================================================
+   Bucle principal
+   ========================================================= */
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now; T += dt;
+  solve(); update(dt);
+  for (const g of chain) for (const e of g.items) drawAct(e);
+  drawWires(dt);
+  uiT += dt; if (uiT > .12) { uiT = 0; syncUI(); }
+  updateAudio();
+  requestAnimationFrame(frame);
+}
+setBat('li', true);
+resetChain([['bulb', 'motor', 'led']]);
+paintSliders();
+rebuild();
+solve(); syncUI(true);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
